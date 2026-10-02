@@ -49,6 +49,27 @@
   }
   function prayedOn(item, d) { return (state.log[d] || []).indexOf(item.id) !== -1; }
 
+  function prayCount(id) {
+    var n = 0;
+    for (var d in state.log) if (state.log[d].indexOf(id) !== -1) n++;
+    return n;
+  }
+  // 某天的狀態：done=全部完成（印花）、partial=只完成一部分、none=沒有
+  function dayStatus(d) {
+    var sched = state.items.filter(function (it) { return scheduledOn(it, d); });
+    var missed = sched.filter(function (it) { return !prayedOn(it, d); }).length;
+    var prayed = sched.length - missed;
+    var any = (state.log[d] || []).some(function (id) { return state.items.some(function (it) { return it.id === id; }); });
+    var st = any && missed === 0 ? 'done' : (any ? 'partial' : 'none');
+    return { status: st, total: sched.length, prayed: prayed };
+  }
+  function streak() {
+    var d = today(), n = 0;
+    if (dayStatus(d).status !== 'done') d = addDays(d, -1); // 今天還沒完成不算斷
+    while (dayStatus(d).status === 'done') { n++; d = addDays(d, -1); }
+    return n;
+  }
+
   function autoSlot(level, exceptId) {
     var n = level === 'weekly' ? 7 : 28;
     var counts = [];
@@ -107,12 +128,13 @@
   var revealed = null; // 今日頁目前展開的事項（只存在記憶體，離開就收起）
 
   function render() {
-    ['today', 'all', 'settings'].forEach(function (t) { $('view-' + t).hidden = t !== tab; });
+    ['today', 'calendar', 'all', 'settings'].forEach(function (t) { $('view-' + t).hidden = t !== tab; });
     document.querySelectorAll('.tabbar button').forEach(function (b) {
       b.classList.toggle('active', b.dataset.tab === tab);
     });
-    $('fab').hidden = tab === 'settings';
+    $('fab').hidden = tab === 'settings' || tab === 'calendar';
     if (tab === 'today') renderToday();
+    else if (tab === 'calendar') renderCalendar();
     else if (tab === 'all') renderAll();
     else renderSettings();
   }
@@ -180,6 +202,36 @@
     $('view-today').innerHTML = html;
   }
 
+  var calMonth = null; // 'YYYY-MM'
+  var calDay = null;
+
+  function renderCalendar() {
+    var t = today();
+    if (!calMonth) calMonth = t.slice(0, 7);
+    var y = +calMonth.slice(0, 4), m = +calMonth.slice(5, 7);
+    var first = new Date(y, m - 1, 1, 12), days = new Date(y, m, 0).getDate();
+    var flowers = 0, cells = '';
+    for (var i = 0; i < first.getDay(); i++) cells += '<div class="cal-cell blank"></div>';
+    for (var day = 1; day <= days; day++) {
+      var d = calMonth + '-' + (day < 10 ? '0' : '') + day;
+      var st = d > t ? { status: 'none' } : dayStatus(d);
+      if (st.status === 'done') flowers++;
+      cells += '<button class="cal-cell' + (d === t ? ' today' : '') + (d === calDay ? ' sel' : '') + '" data-day="' + d + '">' +
+        '<span class="n">' + day + '</span><span class="st">' +
+        (st.status === 'done' ? '🌸' : st.status === 'partial' ? '<i class="dot"></i>' : '') + '</span></button>';
+    }
+    var html = '<h1>祈禱日曆</h1><p class="sub">每天完成所有祈禱，就得到一朵花</p>' +
+      '<div class="card stat"><div><div class="num">' + flowers + ' <small>朵（本月）</small></div><small>連續 ' + streak() + ' 天</small></div><div style="font-size:34px">🌸</div></div>' +
+      '<div class="card"><div class="cal-nav"><button class="edit-btn" data-cal="-1">‹ 上個月</button><b>' + y + ' 年 ' + m + ' 月</b><button class="edit-btn" data-cal="1">下個月 ›</button></div>' +
+      '<div class="cal-grid">' + WEEKDAYS.map(function (w) { return '<div class="cal-wd">' + w + '</div>'; }).join('') + cells + '</div></div>';
+    if (calDay) {
+      var info = calDay > t ? null : dayStatus(calDay);
+      html += '<div class="card"><b>' + fmtDate(calDay) + '</b><p class="hint" style="margin:6px 0 0">' +
+        (!info ? '還沒到這一天' : info.total ? '完成 ' + info.prayed + ' / ' + info.total + ' 件' + (info.status === 'done' ? ' 🌸' : '') : '這天沒有排定的事項') + '</p></div>';
+    }
+    $('view-calendar').innerHTML = html;
+  }
+
   function renderAll() {
     var live = state.items.filter(function (it) { return !it.archivedDate; });
     var answered = live.filter(function (it) { return it.answeredDate; }).length;
@@ -212,6 +264,7 @@
           (it.note ? '<div class="note">' + esc(it.note) + '</div>' : '') +
           (it.answeredDate && it.answerNote ? '<div class="note">✨ ' + esc(it.answerNote) + '</div>' : '')) +
         '<div class="meta">' + badge(it) + '<span class="badge b-plain">' + scheduleText(it) + (it.time ? ' ' + it.time : '') + '</span>' +
+        '<span class="badge b-plain">🙏 ' + prayCount(it.id) + ' 次</span>' +
         (it.answeredDate ? '<span class="badge b-ans">已應允 ' + it.answeredDate + '</span>' : '') + '</div></div>' +
         '<button class="edit-btn" data-edit="' + it.id + '">編輯</button></div>';
     });
@@ -327,7 +380,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     var tabBtn = t.closest('.tabbar button');
-    if (tabBtn) { revealed = null; revealedAll = null; tab = tabBtn.dataset.tab; render(); window.scrollTo(0, 0); return; }
+    if (tabBtn) { revealed = null; revealedAll = null; calMonth = null; calDay = null; tab = tabBtn.dataset.tab; render(); window.scrollTo(0, 0); return; }
     if (t.closest('#fab')) { openEditor(null); return; }
     if (t === $('sheet-backdrop')) { closeSheet(); return; }
     var dn = t.closest('[data-done]');
@@ -338,6 +391,10 @@
     if (rv) { revealed = revealed === rv.dataset.reveal ? null : rv.dataset.reveal; renderToday(); return; }
     var ra = t.closest('[data-reveal-all]');
     if (ra) { revealedAll = revealedAll === ra.dataset.revealAll ? null : ra.dataset.revealAll; renderAll(); return; }
+    var cm = t.closest('[data-cal]');
+    if (cm) { var yy = +calMonth.slice(0, 4), mm = +calMonth.slice(5, 7) + (+cm.dataset.cal); var nd = new Date(yy, mm - 1, 1); calMonth = ymd(nd).slice(0, 7); calDay = null; renderCalendar(); return; }
+    var cd = t.closest('[data-day]');
+    if (cd) { calDay = calDay === cd.dataset.day ? null : cd.dataset.day; renderCalendar(); return; }
     var chip = t.closest('[data-filter]');
     if (chip) { filter = chip.dataset.filter; renderAll(); return; }
     var edit = t.closest('[data-edit]');
