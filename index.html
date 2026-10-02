@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>祈禱足跡</title>
+<meta name="theme-color" content="#f7f1ea">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="祈禱足跡">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+  <section id="view-today" class="view"></section>
+  <section id="view-all" class="view" hidden></section>
+  <section id="view-settings" class="view" hidden></section>
+</main>
+
+<button id="fab" class="fab" aria-label="新增祈禱事項">＋</button>
+
+<nav class="tabbar">
+  <button data-tab="today" class="active"><span class="ico">🌿</span>今日</button>
+  <button data-tab="all"><span class="ico">📖</span>全部事項</button>
+  <button data-tab="settings"><span class="ico">⚙️</span>設定</button>
+</nav>
+
+<div id="sheet-backdrop" class="backdrop" hidden></div>
+<div id="sheet" class="sheet" hidden role="dialog" aria-modal="true"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
