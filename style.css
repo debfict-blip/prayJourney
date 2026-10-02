@@ -158,3 +158,16 @@ h2 { font-size: 15px; color: var(--muted); font-weight: 500; margin: 26px 6px 10
   position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(150px + env(safe-area-inset-bottom)); z-index: 40;
   background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 99px; font-size: 14px; box-shadow: var(--shadow);
 }
+
+.pray { cursor: pointer; transition: opacity .2s; }
+.pray.later { opacity: .55; }
+.pray.open { opacity: 1; }
+.pray-head { display: flex; justify-content: space-between; align-items: center; min-height: 26px; }
+.pray .mask { letter-spacing: .25em; color: var(--muted); font-size: 18px; }
+.pray .time { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.pray .title { font-weight: 500; font-size: 17px; margin-top: 2px; word-break: break-word; }
+.pray .note { color: var(--muted); font-size: 14px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+.done-btn { margin-top: 14px; }
+.undo { list-style: none; padding-left: 0 !important; }
+.undo li { display: flex; justify-content: space-between; align-items: center; }
+.field input[type=time] { flex: 1; border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 11px 14px; font-size: 16px; }

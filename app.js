@@ -101,6 +101,7 @@
   // ---------- 畫面 ----------
   var tab = 'today';
   var filter = 'all';
+  var revealed = null; // 今日頁目前展開的事項（只存在記憶體，離開就收起）
 
   function render() {
     ['today', 'all', 'settings'].forEach(function (t) { $('view-' + t).hidden = t !== tab; });
@@ -117,29 +118,52 @@
     return '<span class="badge b-' + it.level + '">' + LEVELS[it.level] + '</span>';
   }
 
+  function nowHM() {
+    var n = new Date(), h = n.getHours(), m = n.getMinutes();
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+
   function renderToday() {
-    var t = today();
-    var list = state.items.filter(function (it) { return scheduledOn(it, t); });
-    var done = list.filter(function (it) { return prayedOn(it, t); }).length;
-    var pct = list.length ? Math.round(done / list.length * 100) : 0;
+    var t = today(), now = nowHM();
+    var all = state.items.filter(function (it) { return scheduledOn(it, t); });
+    var pending = all.filter(function (it) { return !prayedOn(it, t); });
+    var done = all.filter(function (it) { return prayedOn(it, t); });
+    if (revealed && !pending.some(function (it) { return it.id === revealed; })) revealed = null;
+
+    // 有指定時間的依時間排序，沒指定的放後面
+    pending.sort(function (a, b) {
+      if (a.time && b.time) return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+      return a.time ? -1 : b.time ? 1 : 0;
+    });
+
     var html = '<h1>今日祈禱</h1><p class="sub">' + fmtDate(t) + '</p>';
 
     if (!state.items.length) {
       html += '<div class="empty"><div class="big">🕊️</div><p>還沒有祈禱事項<br>點右下角的 ＋ 開始新增</p></div>';
-    } else if (!list.length) {
+    } else if (!all.length) {
       html += '<div class="empty"><div class="big">☀️</div><p>今天沒有安排的祈禱事項<br>安靜與神同在也很好</p></div>';
     } else {
-      html += '<div class="card progress"><b>' + done + ' / ' + list.length + '</b><div class="bar"><i style="width:' + pct + '%"></i></div></div>';
-      // 未完成在前
-      list.sort(function (a, b) { return prayedOn(a, t) - prayedOn(b, t); });
-      list.forEach(function (it) {
-        var d = prayedOn(it, t);
-        html += '<div class="card item' + (d ? ' done' : '') + '">' +
-          '<input type="checkbox" class="chk" data-pray="' + it.id + '"' + (d ? ' checked' : '') + ' aria-label="已禱告">' +
-          '<div class="body"><div class="title">' + esc(it.title) + '</div>' +
-          (it.note ? '<div class="note">' + esc(it.note) + '</div>' : '') +
-          '<div class="meta">' + badge(it) + '</div></div></div>';
+      var pct = Math.round(done.length / all.length * 100);
+      html += '<div class="card progress"><b>' + done.length + ' / ' + all.length + '</b><div class="bar"><i style="width:' + pct + '%"></i></div></div>';
+      if (!pending.length) html += '<div class="empty"><div class="big">🌸</div><p>今天的祈禱都完成了<br>感謝神</p></div>';
+      pending.forEach(function (it) {
+        var open = revealed === it.id;
+        var later = it.time && it.time > now;
+        html += '<div class="card pray' + (open ? ' open' : '') + (later ? ' later' : '') + '" data-reveal="' + it.id + '">' +
+          '<div class="pray-head"><span class="mask">' + (open ? '' : '• • • • • •') + '</span>' +
+          (it.time ? '<span class="time">' + it.time + '</span>' : '') + '</div>';
+        if (open) {
+          html += '<div class="title">' + esc(it.title) + '</div>' +
+            (it.note ? '<div class="note">' + esc(it.note) + '</div>' : '') +
+            '<button class="btn block done-btn" data-done="' + it.id + '">禱告完了</button>';
+        }
+        html += '<div class="meta">' + badge(it) + (later ? '<span class="badge b-plain">稍後</span>' : '') + '</div></div>';
       });
+      if (done.length) {
+        html += '<details class="card missed"><summary>今天已完成 ' + done.length + ' 件</summary><ul class="undo">' +
+          done.map(function (it) { return '<li><span>已禱告 ✓</span><button class="edit-btn" data-undo="' + it.id + '">復原</button></li>'; }).join('') +
+          '</ul></details>';
+      }
     }
 
     var missed = missedRecent(7);
@@ -147,7 +171,7 @@
       var total = missed.reduce(function (n, m) { return n + m.items.length; }, 0);
       html += '<details class="card missed"><summary>最近 7 天漏掉 ' + total + ' 件</summary><ul>' +
         missed.reverse().map(function (m) {
-          return '<li>' + fmtDate(m.date) + '：' + m.items.map(function (i) { return esc(i.title); }).join('、') + '</li>';
+          return '<li>' + fmtDate(m.date) + '：漏掉 ' + m.items.length + ' 件</li>';
         }).join('') + '</ul></details>';
     }
     $('view-today').innerHTML = html;
@@ -181,7 +205,7 @@
         '<div class="body"><div class="title">' + esc(it.title) + '</div>' +
         (it.note ? '<div class="note">' + esc(it.note) + '</div>' : '') +
         (it.answeredDate && it.answerNote ? '<div class="note">✨ ' + esc(it.answerNote) + '</div>' : '') +
-        '<div class="meta">' + badge(it) + '<span class="badge b-plain">' + scheduleText(it) + '</span>' +
+        '<div class="meta">' + badge(it) + '<span class="badge b-plain">' + scheduleText(it) + (it.time ? ' ' + it.time : '') + '</span>' +
         (it.answeredDate ? '<span class="badge b-ans">已應允 ' + it.answeredDate + '</span>' : '') + '</div></div>' +
         '<button class="edit-btn" data-edit="' + it.id + '">編輯</button></div>';
     });
@@ -196,7 +220,7 @@
       '<button class="btn ghost" id="import">匯入備份</button></div>' +
       '<input type="file" id="file" accept="application/json,.json" hidden></div>' +
       '<div class="card"><div class="title">使用說明</div>' +
-      '<p class="hint">每日：每天都會出現。<br>每週：自動平均排在週一到週日其中一天（可手動調整）。<br>每月：自動平均排在每月 1–28 日其中一天。<br>當天沒有勾選就算漏掉，不會順延。<br>已應允的事項不再出現在今日清單。</p></div>';
+      '<p class="hint">每日：每天都會出現。<br>今日頁預設遮住內容，點開才看得到，按「禱告完了」後就會收起。<br>每週：自動平均排在週一到週日其中一天（可手動調整）。<br>每月：自動平均排在每月 1–28 日其中一天。<br>當天沒有勾選就算漏掉，不會順延。<br>已應允的事項不再出現在今日清單。</p></div>';
   }
 
   // ---------- 編輯面板 ----------
@@ -228,6 +252,8 @@
       '<div class="field" id="f-slot-wrap" ' + (level === 'daily' ? 'hidden' : '') + '><label>排在哪一天</label><select id="f-slot">' + slotOptions(level, keepSlot) + '</select>' +
       '<p class="hint">自動安排會把事項平均分散，確保每週／每月都會輪到。</p></div>';
 
+    html += '<div class="field"><label>提醒時間（選填，用來排序今日清單）</label><div class="row"><input type="time" id="f-time" value="' + esc(it && it.time || '') + '"><button type="button" class="btn ghost" id="f-time-clear">不指定</button></div></div>';
+
     if (it) {
       html += '<div class="ans-box"><div class="row"><input type="checkbox" class="chk gold" id="f-ans"' + (it.answeredDate ? ' checked' : '') + '><label for="f-ans">神已應允</label></div>' +
         '<div id="f-ans-wrap" ' + (it.answeredDate ? '' : 'hidden') + '>' +
@@ -252,6 +278,7 @@
       };
     });
     if ($('f-ans')) $('f-ans').onchange = function () { $('f-ans-wrap').hidden = !this.checked; };
+    $('f-time-clear').onclick = function () { $('f-time').value = ''; };
     $('f-cancel').onclick = closeSheet;
     $('f-save').onclick = function () {
       var title = $('f-title').value.trim();
@@ -260,6 +287,7 @@
       target.title = title;
       target.note = $('f-note').value.trim();
       target.level = level;
+      target.time = $('f-time').value || '';
       if (level === 'daily') target.slot = null;
       else {
         var v = $('f-slot').value;
@@ -292,9 +320,15 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     var tabBtn = t.closest('.tabbar button');
-    if (tabBtn) { tab = tabBtn.dataset.tab; render(); window.scrollTo(0, 0); return; }
+    if (tabBtn) { revealed = null; tab = tabBtn.dataset.tab; render(); window.scrollTo(0, 0); return; }
     if (t.closest('#fab')) { openEditor(null); return; }
     if (t === $('sheet-backdrop')) { closeSheet(); return; }
+    var dn = t.closest('[data-done]');
+    if (dn) { markPrayed(dn.dataset.done, true); revealed = null; renderToday(); toast('感謝神，已完成'); return; }
+    var un = t.closest('[data-undo]');
+    if (un) { markPrayed(un.dataset.undo, false); renderToday(); return; }
+    var rv = t.closest('[data-reveal]');
+    if (rv) { revealed = revealed === rv.dataset.reveal ? null : rv.dataset.reveal; renderToday(); return; }
     var chip = t.closest('[data-filter]');
     if (chip) { filter = chip.dataset.filter; renderAll(); return; }
     var edit = t.closest('[data-edit]');
@@ -305,12 +339,7 @@
 
   document.addEventListener('change', function (e) {
     var t = e.target;
-    if (t.dataset && t.dataset.pray) {
-      var d = today(), arr = state.log[d] || (state.log[d] = []), i = arr.indexOf(t.dataset.pray);
-      if (t.checked && i === -1) arr.push(t.dataset.pray);
-      if (!t.checked && i !== -1) arr.splice(i, 1);
-      save(); renderToday();
-    } else if (t.dataset && t.dataset.answer) {
+    if (t.dataset && t.dataset.answer) {
       var it = state.items.filter(function (x) { return x.id === t.dataset.answer; })[0];
       if (!it) return;
       if (t.checked) { it.answeredDate = today(); save(); renderAll(); toast('感謝神！可點「編輯」記下見證'); }
@@ -319,6 +348,13 @@
       importData(t.files[0]); t.value = '';
     }
   });
+
+  function markPrayed(id, on) {
+    var d = today(), arr = state.log[d] || (state.log[d] = []), i = arr.indexOf(id);
+    if (on && i === -1) arr.push(id);
+    if (!on && i !== -1) arr.splice(i, 1);
+    save();
+  }
 
   function exportData() {
     var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -345,7 +381,7 @@
   }
 
   // 回到 app 時（跨日）重新整理
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) render(); });
+  document.addEventListener('visibilitychange', function () { revealed = null; if (!document.hidden) render(); });
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
