@@ -171,3 +171,7 @@ h2 { font-size: 15px; color: var(--muted); font-weight: 500; margin: 26px 6px 10
 .undo { list-style: none; padding-left: 0 !important; }
 .undo li { display: flex; justify-content: space-between; align-items: center; }
 .field input[type=time] { flex: 1; border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 11px 14px; font-size: 16px; }
+
+.mask-text { letter-spacing: .25em; color: var(--muted); }
+.switch { gap: 14px; cursor: pointer; }
+.item .body[data-reveal-all] { cursor: pointer; }

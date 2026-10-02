@@ -1,4 +1,4 @@
-var CACHE = 'prayjourney-v2';
+var CACHE = 'prayjourney-v3';
 var FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {

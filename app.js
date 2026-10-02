@@ -101,6 +101,9 @@
   // ---------- 畫面 ----------
   var tab = 'today';
   var filter = 'all';
+  var HIDE_KEY = 'prayjourney.hideAll';
+  var hideAll = (function () { try { return localStorage.getItem(HIDE_KEY) !== '0'; } catch (e) { return true; } })();
+  var revealedAll = null; // 全部事項頁目前展開的事項
   var revealed = null; // 今日頁目前展開的事項（只存在記憶體，離開就收起）
 
   function render() {
@@ -200,11 +203,14 @@
       html += '<div class="empty"><div class="big">🍃</div><p>' + (state.items.length ? '這個分類還沒有事項' : '還沒有祈禱事項') + '</p></div>';
     }
     list.forEach(function (it) {
+      var hidden = hideAll && revealedAll !== it.id;
       html += '<div class="card item">' +
         '<input type="checkbox" class="chk gold" data-answer="' + it.id + '"' + (it.answeredDate ? ' checked' : '') + ' aria-label="已應允"' + (it.archivedDate ? ' disabled' : '') + '>' +
-        '<div class="body"><div class="title">' + esc(it.title) + '</div>' +
-        (it.note ? '<div class="note">' + esc(it.note) + '</div>' : '') +
-        (it.answeredDate && it.answerNote ? '<div class="note">✨ ' + esc(it.answerNote) + '</div>' : '') +
+        '<div class="body"' + (hideAll ? ' data-reveal-all="' + it.id + '"' : '') + '>' +
+        (hidden ? '<div class="title mask-text">• • • • • •</div>' :
+          '<div class="title">' + esc(it.title) + '</div>' +
+          (it.note ? '<div class="note">' + esc(it.note) + '</div>' : '') +
+          (it.answeredDate && it.answerNote ? '<div class="note">✨ ' + esc(it.answerNote) + '</div>' : '')) +
         '<div class="meta">' + badge(it) + '<span class="badge b-plain">' + scheduleText(it) + (it.time ? ' ' + it.time : '') + '</span>' +
         (it.answeredDate ? '<span class="badge b-ans">已應允 ' + it.answeredDate + '</span>' : '') + '</div></div>' +
         '<button class="edit-btn" data-edit="' + it.id + '">編輯</button></div>';
@@ -214,6 +220,7 @@
 
   function renderSettings() {
     $('view-settings').innerHTML = '<h1>設定</h1><p class="sub">資料只存在這支手機的 Safari 裡</p>' +
+      '<div class="card"><label class="row switch"><input type="checkbox" class="chk" id="hide-all"' + (hideAll ? ' checked' : '') + '><span><span class="title">隱藏「全部事項」內容</span><span class="hint" style="display:block;margin:0">點一下事項才會顯示</span></span></label></div>' +
       '<div class="card"><div class="title">備份資料</div>' +
       '<p class="hint">清除 Safari 網站資料會遺失紀錄，建議定期匯出備份。</p>' +
       '<div class="actions"><button class="btn" id="export">匯出備份</button>' +
@@ -320,7 +327,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     var tabBtn = t.closest('.tabbar button');
-    if (tabBtn) { revealed = null; tab = tabBtn.dataset.tab; render(); window.scrollTo(0, 0); return; }
+    if (tabBtn) { revealed = null; revealedAll = null; tab = tabBtn.dataset.tab; render(); window.scrollTo(0, 0); return; }
     if (t.closest('#fab')) { openEditor(null); return; }
     if (t === $('sheet-backdrop')) { closeSheet(); return; }
     var dn = t.closest('[data-done]');
@@ -329,6 +336,8 @@
     if (un) { markPrayed(un.dataset.undo, false); renderToday(); return; }
     var rv = t.closest('[data-reveal]');
     if (rv) { revealed = revealed === rv.dataset.reveal ? null : rv.dataset.reveal; renderToday(); return; }
+    var ra = t.closest('[data-reveal-all]');
+    if (ra) { revealedAll = revealedAll === ra.dataset.revealAll ? null : ra.dataset.revealAll; renderAll(); return; }
     var chip = t.closest('[data-filter]');
     if (chip) { filter = chip.dataset.filter; renderAll(); return; }
     var edit = t.closest('[data-edit]');
@@ -344,6 +353,9 @@
       if (!it) return;
       if (t.checked) { it.answeredDate = today(); save(); renderAll(); toast('感謝神！可點「編輯」記下見證'); }
       else { delete it.answeredDate; delete it.answerNote; save(); renderAll(); }
+    } else if (t.id === 'hide-all') {
+      hideAll = t.checked; revealedAll = null;
+      try { localStorage.setItem(HIDE_KEY, hideAll ? '1' : '0'); } catch (err) {}
     } else if (t.id === 'file') {
       importData(t.files[0]); t.value = '';
     }
@@ -381,7 +393,7 @@
   }
 
   // 回到 app 時（跨日）重新整理
-  document.addEventListener('visibilitychange', function () { revealed = null; if (!document.hidden) render(); });
+  document.addEventListener('visibilitychange', function () { revealed = null; revealedAll = null; if (!document.hidden) render(); });
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
